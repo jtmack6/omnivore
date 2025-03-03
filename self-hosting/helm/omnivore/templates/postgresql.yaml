@@ -1,0 +1,103 @@
+{{- if .Values.postgresql.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "omnivore.fullname" . }}-postgresql
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.primary.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "omnivore.fullname" . }}-postgresql
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "omnivore.selectorLabels" . | nindent 6 }}
+      component: postgresql
+  template:
+    metadata:
+      labels:
+        {{- include "omnivore.selectorLabels" . | nindent 8 }}
+        component: postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: Always
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: omnivore-pg-password
+                  key: PG_PASSWORD
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          {{- if .Values.postgresql.primary.healthcheck.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgresql.auth.username }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgresql.auth.username }}
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources.postgresql | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "omnivore.fullname" . }}-postgresql
+---
+{{- if not (lookup "v1" "Service" .Release.Namespace (printf "%s-postgresql" (include "omnivore.fullname" .))) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "omnivore.fullname" . }}-postgresql
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.postgresql.service.type }}
+  ports:
+    - port: {{ .Values.postgresql.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+  selector:
+    {{- include "omnivore.selectorLabels" . | nindent 4 }}
+    component: postgresql
+{{- end }}
+{{- end }} 

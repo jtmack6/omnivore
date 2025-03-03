@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "omnivore.fullname" . }}
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "omnivore.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "omnivore.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            - name: IMAGE_PROXY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.imageProxy.name }}
+                  key: {{ .Values.secrets.imageProxy.key }}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.jwt.name }}
+                  key: {{ .Values.secrets.jwt.key }}
+            - name: SSO_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.ssoJwt.name }}
+                  key: {{ .Values.secrets.ssoJwt.key }}
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.pgPassword.name }}
+                  key: {{ .Values.secrets.pgPassword.key }}
+            - name: VERIFICATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.contentFetch.name }}
+                  key: {{ .Values.secrets.contentFetch.key }}
+          resources:
+            {{- toYaml .Values.resources.api | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20 

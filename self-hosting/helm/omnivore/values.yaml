@@ -1,0 +1,221 @@
+# Default values for omnivore
+nameOverride: ""
+fullnameOverride: ""
+
+# Global settings
+global:
+  environment: production
+
+# Image settings
+image:
+  repository: jtmack/omnivore-api
+  tag: latest
+  pullPolicy: Always
+
+web:
+  image:
+    repository: jtmack/omnivore-web
+    tag: latest
+    pullPolicy: Always
+
+imageProxy:
+  image:
+    repository: jtmack/omnivore-image-proxy
+    tag: latest
+    pullPolicy: Always
+
+contentFetch:
+  image:
+    repository: jtmack/omnivore-content-fetch
+    tag: latest
+    pullPolicy: Always
+
+migrate:
+  image:
+    repository: jtmack/omnivore-migrate
+    tag: latest
+    pullPolicy: Always
+
+# Service settings
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress settings
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: omnivore.mack.sh
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: omnivore-tls
+      hosts:
+        - omnivore.mack.sh
+
+# Database settings
+postgresql:
+  enabled: true
+  image:
+    repository: ankane/pgvector
+    tag: v0.5.1
+  auth:
+    username: postgres
+    database: omnivore
+    password: "omnivore"  # This should be overridden in my-values.yaml
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+    healthcheck:
+      enabled: true
+  service:
+    type: ClusterIP
+    port: 5432
+
+# Redis settings
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7.2.4
+  persistence:
+    enabled: true
+    size: 1Gi
+  service:
+    type: ClusterIP
+    port: 6379
+
+# MinIO settings
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+  persistence:
+    enabled: true
+    size: 10Gi
+  service:
+    type: ClusterIP
+    port: 9000
+  credentials:
+    accessKey: minio
+    secretKey: miniominio
+  buckets:
+    - name: omnivore
+      policy: public
+
+# Resource settings
+resources:
+  postgresql:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  redis:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  minio:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Environment variables
+env:
+  - name: APP_ENV
+    value: "prod"
+  - name: BASE_URL
+    value: "https://omnivore.mack.sh"
+  - name: SERVER_BASE_URL
+    value: "https://omnivore.mack.sh"
+  - name: HIGHLIGHTS_BASE_URL
+    value: "https://omnivore.mack.sh"
+  - name: PG_HOST
+    value: "omnivore-postgresql"
+  - name: PG_PORT
+    value: "5432"
+  - name: PG_DB
+    value: "omnivore"
+  - name: PG_USER
+    value: "postgres"
+  - name: PG_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: omnivore-pg-password
+        key: PG_PASSWORD
+  - name: PG_POOL_MAX
+    value: "20"
+  - name: PG_POOL_MIN
+    value: "2"
+  - name: PG_POOL_IDLE_TIMEOUT_MILLIS
+    value: "30000"
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: omnivore-jwt-secret
+        key: JWT_SECRET
+  - name: SSO_JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: omnivore-sso-jwt-secret
+        key: SSO_JWT_SECRET
+  - name: IMAGE_PROXY_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: omnivore-image-proxy-secret
+        key: IMAGE_PROXY_SECRET
+  - name: VERIFICATION_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: omnivore-content-fetch-verification-token
+        key: VERIFICATION_TOKEN
+  - name: PORT
+    value: "8080"
+  - name: NODE_ENV
+    value: "production"
+  - name: REDIS_URL
+    value: "redis://omnivore-redis:6379"
+  - name: S3_BUCKET
+    value: "omnivore"
+  - name: S3_ENDPOINT
+    value: "http://omnivore-minio:9000"
+  - name: S3_ACCESS_KEY
+    value: "minio"
+  - name: S3_SECRET_KEY
+    value: "miniominio"
+  - name: S3_REGION
+    value: "us-east-1"
+  - name: S3_FORCE_PATH_STYLE
+    value: "true"
+
+# Secret references
+secrets:
+  imageProxy:
+    name: omnivore-image-proxy-secret
+    key: IMAGE_PROXY_SECRET
+  jwt:
+    name: omnivore-jwt-secret
+    key: JWT_SECRET
+  ssoJwt:
+    name: omnivore-sso-jwt-secret
+    key: SSO_JWT_SECRET
+  pgPassword:
+    name: omnivore-pg-password
+    key: PG_PASSWORD
+  contentFetch:
+    name: omnivore-content-fetch-verification-token
+    key: VERIFICATION_TOKEN 

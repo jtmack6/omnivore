@@ -3,7 +3,7 @@ FROM node:22.12-alpine as builder
 WORKDIR /app
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
-RUN apk add --no-cache g++ make python3
+RUN apk add --no-cache g++ make python3 py3-pip python3-dev
 
 COPY package.json .
 COPY yarn.lock .

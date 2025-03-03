@@ -1,0 +1,131 @@
+{{- if .Values.minio.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "omnivore.fullname" . }}-minio
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.minio.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "omnivore.fullname" . }}-minio
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "omnivore.selectorLabels" . | nindent 6 }}
+      component: minio
+  template:
+    metadata:
+      labels:
+        {{- include "omnivore.selectorLabels" . | nindent 8 }}
+        component: minio
+    spec:
+      containers:
+        - name: minio
+          image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+          imagePullPolicy: Always
+          args:
+            - server
+            - /data
+          env:
+            - name: MINIO_ROOT_USER
+              value: {{ .Values.minio.credentials.accessKey }}
+            - name: MINIO_ROOT_PASSWORD
+              value: {{ .Values.minio.credentials.secretKey }}
+          ports:
+            - name: minio
+              containerPort: 9000
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: minio
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: minio
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources.minio | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "omnivore.fullname" . }}-minio
+---
+{{- if not (lookup "v1" "Service" .Release.Namespace (printf "%s-minio" (include "omnivore.fullname" .))) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "omnivore.fullname" . }}-minio
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.minio.service.type }}
+  ports:
+    - port: {{ .Values.minio.service.port }}
+      targetPort: minio
+      protocol: TCP
+      name: minio
+  selector:
+    {{- include "omnivore.selectorLabels" . | nindent 4 }}
+    component: minio
+{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "omnivore.fullname" . }}-minio-init
+  labels:
+    {{- include "omnivore.labels" . | nindent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "omnivore.selectorLabels" . | nindent 8 }}
+        component: minio-init
+    spec:
+      containers:
+        - name: minio-init
+          image: minio/mc
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              sleep 5
+              until (mc config host add myminio http://{{ include "omnivore.fullname" . }}-minio:9000 {{ .Values.minio.credentials.accessKey }} {{ .Values.minio.credentials.secretKey }})
+              do
+                echo '...waiting...'
+                sleep 1
+              done
+              {{- range .Values.minio.buckets }}
+              mc mb myminio/{{ .name }}
+              mc policy set {{ .policy }} myminio/{{ .name }}
+              {{- end }}
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: {{ .Values.minio.credentials.accessKey }}
+            - name: MINIO_SECRET_KEY
+              value: {{ .Values.minio.credentials.secretKey }}
+      restartPolicy: OnFailure
+{{- end }} 
