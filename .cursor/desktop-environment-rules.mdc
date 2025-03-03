@@ -1,0 +1,9 @@
+---
+description: Desktop Environment Rule
+globs: 
+alwaysApply: true
+---
+- I am on Mac OSX machine using Sequoai
+- Use fish shell
+- Use MacPorts to install most software
+
